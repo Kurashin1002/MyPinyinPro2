@@ -17,7 +17,7 @@
 
     <div class="max-w-md mx-auto mb-4 px-2 flex justify-between items-end">
         <h1 class="text-3xl font-black italic tracking-tighter text-slate-800">MyPinyin</h1>
-        <span class="text-[10px] font-bold text-slate-400 pb-1">v17.3 - Dual Quiz Mode</span>
+        <span class="text-[10px] font-bold text-slate-400 pb-1">v17.4 - Ultimate Mode</span>
     </div>
 
     <nav class="flex justify-around mb-6 bg-white p-2 rounded-2xl shadow-md max-w-md mx-auto border border-slate-200 sticky top-2 z-50">
@@ -27,6 +27,7 @@
     </nav>
 
     <div class="max-w-md mx-auto">
+        <!-- 登録セクション -->
         <section id="s-add" class="space-y-4">
             <div class="bg-white p-6 rounded-[2.5rem] shadow-xl space-y-5 border-2 border-transparent">
                 <div id="edit-banner" class="hidden text-center py-2 bg-amber-500 text-white text-xs font-black rounded-xl">編集モード</div>
@@ -65,6 +66,7 @@
             </div>
         </section>
 
+        <!-- 一覧セクション -->
         <section id="s-list" class="h-s space-y-4">
             <div id="word-list-container" class="space-y-4"></div>
             
@@ -78,11 +80,17 @@
                     <button id="export-btn" class="bg-indigo-500 hover:bg-indigo-600 p-3 rounded-xl font-black text-sm transition-all">現在のデータを表示</button>
                     <button id="import-btn" class="bg-emerald-500 hover:bg-emerald-600 p-3 rounded-xl font-black text-sm transition-all">データを追加</button>
                 </div>
-                <button id="clear-all-btn" class="w-full bg-rose-600 hover:bg-rose-700 p-3 rounded-xl font-black text-sm transition-all mt-2">登録単語全削除</button>
+                
+                <!-- 🌟 追加：全単語を未修得に戻すボタン & レイアウト調整 -->
+                <div class="grid grid-cols-1 gap-2 pt-2">
+                    <button id="reset-learned-btn" class="w-full bg-amber-500 hover:bg-amber-600 p-3 rounded-xl font-black text-sm transition-all">全ての単語を未修得に戻す</button>
+                    <button id="clear-all-btn" class="w-full bg-rose-600 hover:bg-rose-700 p-3 rounded-xl font-black text-sm transition-all">登録単語全削除</button>
+                </div>
                 <p class="text-[9px] text-slate-500 text-center uppercase tracking-widest">Supports JSON or Legacy formats</p>
             </div>
         </section>
 
+        <!-- クイズセクション -->
         <section id="s-quiz" class="h-s space-y-4">
             <div id="q-config" class="bg-white p-8 rounded-[2.5rem] shadow-xl text-center space-y-6">
                 <div>
@@ -119,6 +127,7 @@
                 </div>
             </div>
 
+            <!-- クイズ実行画面 -->
             <div id="q-main" class="h-s space-y-6 text-center">
                 <div class="flex justify-between items-center px-4">
                     <div id="q-progress" class="text-xs font-black text-slate-400"></div>
@@ -128,6 +137,7 @@
                     <div id="q-q" class="font-black text-slate-800 break-words w-full">---</div>
                 </div>
 
+                <!-- 回答表示エリア -->
                 <div id="q-a" class="hidden space-y-4 bg-white p-8 rounded-[3rem] shadow-inner border-2 border-indigo-50">
                     <div id="q-ans-container" class="space-y-2">
                         <div class="flex items-center justify-center gap-2">
@@ -161,7 +171,8 @@
         let editIdx = -1;
         let quizPool = []; let curIdx = 0; let curWordRef = null;
         let clearConfirmActive = false;
-        let currentQuizType = "normal"; // 現在の出題モード
+        let resetLearnedConfirmActive = false; // 🌟 未修得リセット用の2段階確認フラグ
+        let currentQuizType = "normal";
 
         window.onload = () => { 
             if(lastPage) document.getElementById('pgIn').value = lastPage; 
@@ -170,6 +181,7 @@
             document.getElementById('export-btn').addEventListener('click', exportData);
             document.getElementById('import-btn').addEventListener('click', importData);
             document.getElementById('clear-all-btn').addEventListener('click', confirmClearAll);
+            document.getElementById('reset-learned-btn').addEventListener('click', confirmResetLearned); // 🌟 イベント紐付け
         };
 
         function speak(text) {
@@ -359,6 +371,37 @@
             }
         }
 
+        // 🌟 追加：未修得リセットの2段階確認処理
+        function confirmResetLearned() {
+            const btn = document.getElementById('reset-learned-btn');
+            if (!resetLearnedConfirmActive) {
+                resetLearnedConfirmActive = true;
+                btn.innerText = "🔄 本当に全て未修得に戻しますか？（もう一度押す）";
+                btn.className = "w-full bg-orange-600 hover:bg-orange-700 p-3 rounded-xl font-black text-sm transition-all text-white";
+                setTimeout(() => { resetLearnedButton(); }, 5000);
+            } else {
+                executeResetLearned();
+            }
+        }
+
+        function executeResetLearned() {
+            db.forEach(item => item.learned = false);
+            save();
+            renderList();
+            resetLearnedButton();
+            alert('すべての単語を未修得（チェックなし）に戻しました！');
+        }
+
+        function resetLearnedButton() {
+            clearConfirmActive = false;
+            resetLearnedConfirmActive = false;
+            const btn = document.getElementById('reset-learned-btn');
+            if (btn) {
+                btn.innerText = "全ての単語を未修得に戻す";
+                btn.className = "w-full bg-amber-500 hover:bg-amber-600 p-3 rounded-xl font-black text-sm transition-all";
+            }
+        }
+
         function confirmClearAll() {
             const btn = document.getElementById('clear-all-btn');
             if (!clearConfirmActive) {
@@ -382,6 +425,7 @@
 
         function resetClearButton() {
             clearConfirmActive = false;
+            resetLearnedConfirmActive = false;
             const btn = document.getElementById('clear-all-btn');
             if (btn) {
                 btn.innerText = "登録単語全削除";
@@ -397,14 +441,12 @@
                 (pageFilter ? `P.${pageFilter} 範囲: ` : "全範囲: ") + `未修得 ${targetWords.length} 語`;
         }
 
-        // 🌟 修正・拡張：クイズ開始処理
         function startQuiz(count) {
             const pageFilter = document.getElementById('q-page-filter').value;
             let unlearned = db.filter(item => !item.learned);
             if (pageFilter) unlearned = unlearned.filter(item => item.page === pageFilter);
             if (unlearned.length === 0) return alert('単語がありません');
             
-            // 選択されたラジオボタンの値（normal または reverse）を取得
             const selectedMode = document.querySelector('input[name="quiz-type"]:checked').value;
             currentQuizType = selectedMode;
 
@@ -415,7 +457,6 @@
             nextQ();
         }
 
-        // 🌟 修正・拡張：出題ロジック
         function nextQ() {
             if (curIdx >= quizPool.length) { alert('終了！'); return exitQuiz(); }
             curWordRef = quizPool[curIdx];
@@ -425,11 +466,9 @@
             const containerEl = document.getElementById('q-ans-container');
 
             if (currentQuizType === "reverse") {
-                // 💡 逆引き：日本語（意味）を出題
                 qEl.innerText = curWordRef.mean || "(意味未登録)";
-                qEl.className = "font-black text-slate-800 break-words w-full text-3xl"; // 日本語用にフォントサイズをやや調整
+                qEl.className = "font-black text-slate-800 break-words w-full text-3xl";
                 
-                // 答えの配置を「大きな簡体字」メインに再構築
                 containerEl.innerHTML = `
                     <div onclick="speak('${curWordRef.word}')" class="text-6xl font-black text-slate-800 py-2 cursor-pointer flex justify-center items-center gap-2">
                         <span>${curWordRef.word}</span><span class="text-2xl">🔊</span>
@@ -437,11 +476,9 @@
                     <div class="text-2xl font-black text-red-600 font-mono">${curWordRef.pinyin}</div>
                 `;
             } else {
-                // 💡 通常：中国語（簡体字）を出題
                 qEl.innerText = curWordRef.word;
-                qEl.className = "font-black text-slate-800 break-words w-full text-7xl"; // 通常の特大フォント
+                qEl.className = "font-black text-slate-800 break-words w-full text-7xl";
                 
-                // 答えの配置を従来通りに構築
                 containerEl.innerHTML = `
                     <div class="flex items-center justify-center gap-2">
                         <div class="text-3xl text-indigo-600 font-black font-mono">${curWordRef.pinyin}</div>
@@ -451,7 +488,6 @@
                 `;
             }
 
-            // メモや例文があれば下に共通で表示
             if (curWordRef.detail) {
                 containerEl.innerHTML += `<div class="text-xs text-slate-400 border-t pt-2 mt-2">${curWordRef.detail.replace(/\n/g, '<br>')}</div>`;
             }
@@ -463,7 +499,6 @@
         
         function showAnswer() { 
             document.getElementById('q-a').classList.remove('hidden'); 
-            // 逆引き・通常に関わらず、答えを見た瞬間にネイティブ音声を自動再生
             speak(curWordRef.word);
         }
         
