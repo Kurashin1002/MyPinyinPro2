@@ -17,7 +17,7 @@
 
     <div class="max-w-md mx-auto mb-4 px-2 flex justify-between items-end">
         <h1 class="text-3xl font-black italic tracking-tighter text-slate-800">MyPinyin</h1>
-        <span class="text-[10px] font-bold text-slate-400 pb-1">v17.0 - Text Export Mode</span>
+        <span class="text-[10px] font-bold text-slate-400 pb-1">v17.1 - Auto Import Mode</span>
     </div>
 
     <nav class="flex justify-around mb-6 bg-white p-2 rounded-2xl shadow-md max-w-md mx-auto border border-slate-200 sticky top-2 z-50">
@@ -79,7 +79,7 @@
                     <button onclick="importData()" class="bg-emerald-500 hover:bg-emerald-600 p-3 rounded-xl font-black text-sm transition-all">データを追加</button>
                 </div>
                 <button id="clear-all-btn" onclick="confirmClearAll()" class="w-full bg-rose-600 hover:bg-rose-700 p-3 rounded-xl font-black text-sm transition-all mt-2">登録単語全削除</button>
-                <p class="text-[9px] text-slate-500 text-center uppercase tracking-widest">Text format: JSON [ {"word":"..."} ]</p>
+                <p class="text-[9px] text-slate-500 text-center uppercase tracking-widest">Supports JSON or Legacy formats</p>
             </div>
         </section>
 
@@ -142,7 +142,7 @@
         };
         let editIdx = -1;
         let quizPool = []; let curIdx = 0; let curWordRef = null;
-        let clearConfirmActive = false; // 全削除確認フラグ
+        let clearConfirmActive = false;
 
         window.onload = () => { if(lastPage) document.getElementById('pgIn').value = lastPage; updateCountBadge(); };
 
@@ -271,7 +271,6 @@
         function toggleLearned(i) { db[i].learned = !db[i].learned; save(); renderList(); }
         
         function del(i) { 
-            // 削除確認の簡易代替（confirmブロック対策として残す場合はそのまま）
             if (confirm('削除しますか？')) { db.splice(i, 1); save(); renderList(); } 
         }
         
@@ -289,47 +288,62 @@
             alert('全データをテキスト形式（JSON）で作成しました。\n全選択されているので、そのままコピーして送信してください。');
         }
 
+        // 🌟 強化された追加（インポート）ロジック
         function importData() {
             const input = document.getElementById('shareData').value.trim();
             if (!input) return alert('データを貼り付けてください');
             if (!confirm('既存のリストに新しい単語を追加しますか？\n（重複は自動でスキップされます）')) return;
+            
             try {
-                let decoded;
-                if (input.startsWith('[')) {
-                    decoded = input;
-                } else {
-                    decoded = decodeURIComponent(escape(atob(input)));
+                let decoded = input;
+                // 古いBase64形式のデータかどうかの自動判別とデコード
+                if (!input.startsWith('[')) {
+                    try {
+                        decoded = decodeURIComponent(escape(atob(input)));
+                    } catch(e) {
+                        // デコードに失敗した場合はそのまま下に流す
+                    }
                 }
+                
                 const newItems = JSON.parse(decoded);
                 if (Array.isArray(newItems)) {
                     let addedCount = 0;
                     newItems.forEach(newItem => {
+                        // 最低限「単語」と「ピンイン」があるデータのみ処理
+                        if (!newItem.word || !newItem.pinyin) return;
+                        
                         const isDuplicate = db.some(oldItem => 
                             oldItem.word === newItem.word && oldItem.pinyin === newItem.pinyin
                         );
                         if (!isDuplicate) {
-                            db.push(newItem);
+                            db.push({
+                                word: newItem.word,
+                                pinyin: newItem.pinyin,
+                                mean: newItem.mean || "",
+                                detail: newItem.detail || "",
+                                page: newItem.page || "",
+                                learned: newItem.learned || false
+                            });
                             addedCount++;
                         }
                     });
                     save(); renderList();
                     alert(`${addedCount} 件を追加しました！\n（重複 ${newItems.length - addedCount} 件をスキップ）`);
                     document.getElementById('shareData').value = "";
+                } else {
+                    alert('エラー：データの形が正しくありません（配列になっていません）。');
                 }
             } catch (e) {
-                alert('エラー：データの形式が正しくありません。');
+                alert('エラー：データの解析に失敗しました。貼り付けた内容が崩れていないか確認してください。\n' + e.message);
             }
         }
 
-        // 修正箇所：スマホ対応2段階全削除ボタン
         function confirmClearAll() {
             const btn = document.getElementById('clear-all-btn');
             if (!clearConfirmActive) {
                 clearConfirmActive = true;
                 btn.innerText = "🚨 本当にすべて削除しますか？（もう一度押す）";
                 btn.classList.replace('bg-rose-600', 'bg-amber-600');
-                
-                // 5秒経過で自動リセット
                 setTimeout(() => { resetClearButton(); }, 5000);
             } else {
                 executeClearAll();
@@ -368,7 +382,6 @@
             if (pageFilter) unlearned = unlearned.filter(item => item.page === pageFilter);
             if (unlearned.length === 0) return alert('単語がありません');
             
-            // countがInfinityの場合でも正しくスライスされる
             quizPool = unlearned.sort(() => 0.5 - Math.random()).slice(0, count);
             curIdx = 0; 
             document.getElementById('q-config').classList.add('h-s'); 
