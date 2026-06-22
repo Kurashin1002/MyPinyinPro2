@@ -17,7 +17,7 @@
 
     <div class="max-w-md mx-auto mb-4 px-2 flex justify-between items-end">
         <h1 class="text-3xl font-black italic tracking-tighter text-slate-800">MyPinyin</h1>
-        <span class="text-[10px] font-bold text-slate-400 pb-1">v17.1 - Auto Import Mode</span>
+        <span class="text-[10px] font-bold text-slate-400 pb-1">v17.3 - Dual Quiz Mode</span>
     </div>
 
     <nav class="flex justify-around mb-6 bg-white p-2 rounded-2xl shadow-md max-w-md mx-auto border border-slate-200 sticky top-2 z-50">
@@ -75,10 +75,10 @@
                 </div>
                 <textarea id="shareData" placeholder="コピーしたデータをここに貼り付けて「追加」" class="w-full h-24 bg-slate-700 rounded-xl p-3 text-[10px] font-mono outline-none border border-slate-600 focus:border-emerald-400"></textarea>
                 <div class="grid grid-cols-2 gap-2">
-                    <button onclick="exportData()" class="bg-indigo-500 hover:bg-indigo-600 p-3 rounded-xl font-black text-sm transition-all">現在のデータを表示</button>
-                    <button onclick="importData()" class="bg-emerald-500 hover:bg-emerald-600 p-3 rounded-xl font-black text-sm transition-all">データを追加</button>
+                    <button id="export-btn" class="bg-indigo-500 hover:bg-indigo-600 p-3 rounded-xl font-black text-sm transition-all">現在のデータを表示</button>
+                    <button id="import-btn" class="bg-emerald-500 hover:bg-emerald-600 p-3 rounded-xl font-black text-sm transition-all">データを追加</button>
                 </div>
-                <button id="clear-all-btn" onclick="confirmClearAll()" class="w-full bg-rose-600 hover:bg-rose-700 p-3 rounded-xl font-black text-sm transition-all mt-2">登録単語全削除</button>
+                <button id="clear-all-btn" class="w-full bg-rose-600 hover:bg-rose-700 p-3 rounded-xl font-black text-sm transition-all mt-2">登録単語全削除</button>
                 <p class="text-[9px] text-slate-500 text-center uppercase tracking-widest">Supports JSON or Legacy formats</p>
             </div>
         </section>
@@ -89,7 +89,20 @@
                     <h2 class="text-2xl font-black text-slate-800">クイズ開始</h2>
                     <div id="unlearned-count" class="text-xs font-bold text-slate-400 mt-1"></div>
                 </div>
-                <div class="pt-2">
+
+                <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-left space-y-3">
+                    <span class="text-xs font-black text-slate-500 block mb-1">出題形式を選択:</span>
+                    <label class="flex items-center gap-3 cursor-pointer font-black text-slate-700">
+                        <input type="radio" name="quiz-type" value="normal" checked class="w-5 h-5 accent-red-500">
+                        <span>漢字 ➔ ピンイン・意味 (通常)</span>
+                    </label>
+                    <label class="flex items-center gap-3 cursor-pointer font-black text-slate-700">
+                        <input type="radio" name="quiz-type" value="reverse" class="w-5 h-5 accent-indigo-600">
+                        <span>意味(日本語) ➔ 漢字・ピンイン (逆引き)</span>
+                    </label>
+                </div>
+
+                <div class="pt-1">
                     <button onclick="document.getElementById('q-page-box').classList.toggle('hidden')" class="text-[10px] font-black text-slate-400 underline">出題範囲を絞る</button>
                     <div id="q-page-box" class="hidden mt-3 bg-slate-50 p-3 rounded-2xl border border-slate-100">
                         <div class="flex items-center gap-2">
@@ -111,13 +124,18 @@
                     <div id="q-progress" class="text-xs font-black text-slate-400"></div>
                     <button onclick="exitQuiz()" class="text-xs font-black text-slate-400 bg-slate-200 px-3 py-1 rounded-full">中止</button>
                 </div>
-                <div onclick="speak(this.innerText)" id="q-q" class="text-7xl font-black py-20 bg-white rounded-[4rem] shadow-2xl text-slate-800 active:bg-slate-50">---</div>
+                <div id="q-q-box" class="py-20 bg-white rounded-[4rem] shadow-2xl flex items-center justify-center px-4 min-h-[220px]">
+                    <div id="q-q" class="font-black text-slate-800 break-words w-full">---</div>
+                </div>
+
                 <div id="q-a" class="hidden space-y-4 bg-white p-8 rounded-[3rem] shadow-inner border-2 border-indigo-50">
-                    <div class="flex items-center justify-center gap-2">
-                        <div id="q-p" class="text-3xl text-indigo-600 font-black font-mono"></div>
-                        <button onclick="speak(document.getElementById('q-q').innerText)" class="text-2xl">🔊</button>
+                    <div id="q-ans-container" class="space-y-2">
+                        <div class="flex items-center justify-center gap-2">
+                            <div id="q-p" class="text-3xl text-indigo-600 font-black font-mono"></div>
+                            <button id="q-speak-btn" class="text-2xl">🔊</button>
+                        </div>
+                        <div id="q-m" class="text-xl text-slate-700 font-black"></div>
                     </div>
-                    <div id="q-m" class="text-xl text-slate-700 font-black"></div>
                     <div class="pt-4 border-t border-slate-100">
                         <label class="flex items-center justify-center gap-2 cursor-pointer">
                             <input type="checkbox" id="q-learned-toggle" onchange="updateLearnedInQuiz()" class="w-6 h-6 accent-green-500">
@@ -143,8 +161,16 @@
         let editIdx = -1;
         let quizPool = []; let curIdx = 0; let curWordRef = null;
         let clearConfirmActive = false;
+        let currentQuizType = "normal"; // 現在の出題モード
 
-        window.onload = () => { if(lastPage) document.getElementById('pgIn').value = lastPage; updateCountBadge(); };
+        window.onload = () => { 
+            if(lastPage) document.getElementById('pgIn').value = lastPage; 
+            updateCountBadge(); 
+            
+            document.getElementById('export-btn').addEventListener('click', exportData);
+            document.getElementById('import-btn').addEventListener('click', importData);
+            document.getElementById('clear-all-btn').addEventListener('click', confirmClearAll);
+        };
 
         function speak(text) {
             if (!text) return;
@@ -285,31 +311,25 @@
             area.value = jsonStr;
             area.focus();
             area.setSelectionRange(0, area.value.length);
-            alert('全データをテキスト形式（JSON）で作成しました。\n全選択されているので、そのままコピーして送信してください。');
+            alert('全データをテキスト形式（JSON）で作成しました。\nコピーして保存してください。');
         }
 
-        // 🌟 強化された追加（インポート）ロジック
         function importData() {
             const input = document.getElementById('shareData').value.trim();
-            if (!input) return alert('データを貼り付けてください');
-            if (!confirm('既存のリストに新しい単語を追加しますか？\n（重複は自動でスキップされます）')) return;
+            if (!input) return alert('エラー：テキストエリアが空っぽです');
             
             try {
                 let decoded = input;
-                // 古いBase64形式のデータかどうかの自動判別とデコード
                 if (!input.startsWith('[')) {
                     try {
                         decoded = decodeURIComponent(escape(atob(input)));
-                    } catch(e) {
-                        // デコードに失敗した場合はそのまま下に流す
-                    }
+                    } catch(e) {}
                 }
                 
                 const newItems = JSON.parse(decoded);
                 if (Array.isArray(newItems)) {
                     let addedCount = 0;
                     newItems.forEach(newItem => {
-                        // 最低限「単語」と「ピンイン」があるデータのみ処理
                         if (!newItem.word || !newItem.pinyin) return;
                         
                         const isDuplicate = db.some(oldItem => 
@@ -327,14 +347,15 @@
                             addedCount++;
                         }
                     });
-                    save(); renderList();
-                    alert(`${addedCount} 件を追加しました！\n（重複 ${newItems.length - addedCount} 件をスキップ）`);
+                    save(); 
+                    renderList();
+                    alert(`【成功】 ${addedCount} 件を追加しました！\n（重複 ${newItems.length - addedCount} 件をスキップ）`);
                     document.getElementById('shareData').value = "";
                 } else {
-                    alert('エラー：データの形が正しくありません（配列になっていません）。');
+                    alert('エラー：データの構造が正しくありません。[ ] で囲まれているか確認してください。');
                 }
             } catch (e) {
-                alert('エラー：データの解析に失敗しました。貼り付けた内容が崩れていないか確認してください。\n' + e.message);
+                alert('【解析エラーが発生】\n貼り付けられたデータが壊れているか、一部の文字がバグっています。\n内容：' + e.message);
             }
         }
 
@@ -376,12 +397,17 @@
                 (pageFilter ? `P.${pageFilter} 範囲: ` : "全範囲: ") + `未修得 ${targetWords.length} 語`;
         }
 
+        // 🌟 修正・拡張：クイズ開始処理
         function startQuiz(count) {
             const pageFilter = document.getElementById('q-page-filter').value;
             let unlearned = db.filter(item => !item.learned);
             if (pageFilter) unlearned = unlearned.filter(item => item.page === pageFilter);
             if (unlearned.length === 0) return alert('単語がありません');
             
+            // 選択されたラジオボタンの値（normal または reverse）を取得
+            const selectedMode = document.querySelector('input[name="quiz-type"]:checked').value;
+            currentQuizType = selectedMode;
+
             quizPool = unlearned.sort(() => 0.5 - Math.random()).slice(0, count);
             curIdx = 0; 
             document.getElementById('q-config').classList.add('h-s'); 
@@ -389,13 +415,47 @@
             nextQ();
         }
 
+        // 🌟 修正・拡張：出題ロジック
         function nextQ() {
             if (curIdx >= quizPool.length) { alert('終了！'); return exitQuiz(); }
             curWordRef = quizPool[curIdx];
             document.getElementById('q-progress').innerText = `${curIdx + 1} / ${quizPool.length}`;
-            document.getElementById('q-q').innerText = curWordRef.word;
-            document.getElementById('q-p').innerText = curWordRef.pinyin;
-            document.getElementById('q-m').innerText = curWordRef.mean;
+            
+            const qEl = document.getElementById('q-q');
+            const containerEl = document.getElementById('q-ans-container');
+
+            if (currentQuizType === "reverse") {
+                // 💡 逆引き：日本語（意味）を出題
+                qEl.innerText = curWordRef.mean || "(意味未登録)";
+                qEl.className = "font-black text-slate-800 break-words w-full text-3xl"; // 日本語用にフォントサイズをやや調整
+                
+                // 答えの配置を「大きな簡体字」メインに再構築
+                containerEl.innerHTML = `
+                    <div onclick="speak('${curWordRef.word}')" class="text-6xl font-black text-slate-800 py-2 cursor-pointer flex justify-center items-center gap-2">
+                        <span>${curWordRef.word}</span><span class="text-2xl">🔊</span>
+                    </div>
+                    <div class="text-2xl font-black text-red-600 font-mono">${curWordRef.pinyin}</div>
+                `;
+            } else {
+                // 💡 通常：中国語（簡体字）を出題
+                qEl.innerText = curWordRef.word;
+                qEl.className = "font-black text-slate-800 break-words w-full text-7xl"; // 通常の特大フォント
+                
+                // 答えの配置を従来通りに構築
+                containerEl.innerHTML = `
+                    <div class="flex items-center justify-center gap-2">
+                        <div class="text-3xl text-indigo-600 font-black font-mono">${curWordRef.pinyin}</div>
+                        <button onclick="speak('${curWordRef.word}')" class="text-2xl">🔊</button>
+                    </div>
+                    <div class="text-xl text-slate-700 font-black">${curWordRef.mean}</div>
+                `;
+            }
+
+            // メモや例文があれば下に共通で表示
+            if (curWordRef.detail) {
+                containerEl.innerHTML += `<div class="text-xs text-slate-400 border-t pt-2 mt-2">${curWordRef.detail.replace(/\n/g, '<br>')}</div>`;
+            }
+
             document.getElementById('q-learned-toggle').checked = curWordRef.learned;
             document.getElementById('q-a').classList.add('hidden');
             curIdx++;
@@ -403,6 +463,7 @@
         
         function showAnswer() { 
             document.getElementById('q-a').classList.remove('hidden'); 
+            // 逆引き・通常に関わらず、答えを見た瞬間にネイティブ音声を自動再生
             speak(curWordRef.word);
         }
         
