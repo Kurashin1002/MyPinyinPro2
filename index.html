@@ -17,7 +17,7 @@
 
     <div class="max-w-md mx-auto mb-4 px-2 flex justify-between items-end">
         <h1 class="text-3xl font-black italic tracking-tighter text-slate-800">MyPinyin</h1>
-        <span class="text-[10px] font-bold text-slate-400 pb-1">v17.5 - Pack Reset Mode</span>
+        <span class="text-[10px] font-bold text-slate-400 pb-1">v17.4 - Multi-Pack Test Mode</span>
     </div>
 
     <nav class="flex justify-around mb-6 bg-white p-2 rounded-2xl shadow-md max-w-md mx-auto border border-slate-200 sticky top-2 z-50">
@@ -66,6 +66,15 @@
         </section>
 
         <section id="s-list" class="h-s space-y-4">
+            <div id="pack-delete-container" class="bg-white p-4 rounded-2xl shadow-md border border-slate-200 space-y-2">
+                <label class="text-xs font-black text-slate-600 ml-1">パックごとに一括操作</label>
+                <div class="flex gap-2">
+                    <select id="delete-pack-select" class="flex-[1.5] p-3 bg-slate-50 rounded-xl font-bold text-xs outline-none border border-slate-200 text-slate-700"></select>
+                    <button onclick="resetPackLearned()" class="flex-1 bg-indigo-500 text-white px-2 rounded-xl font-black text-xs active:scale-95">未修得に戻す</button>
+                    <button onclick="deletePackWords()" class="flex-1 bg-rose-500 text-white px-2 rounded-xl font-black text-xs active:scale-95">一括削除</button>
+                </div>
+            </div>
+
             <div id="word-list-container" class="space-y-4"></div>
             
             <div class="mt-12 p-6 bg-slate-800 rounded-[2rem] text-white space-y-4 shadow-2xl">
@@ -92,12 +101,7 @@
 
                 <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-left space-y-2">
                     <span class="text-xs font-black text-slate-500 block mb-1">出題パックを選択 (複数選択可):</span>
-                    <div id="q-pack-checkboxes" class="space-y-1 max-h-40 overflow-y-auto pr-1"></div>
-                    
-                    <div class="pt-2 border-t border-slate-200 mt-1 flex justify-end">
-                        <button onclick="resetSelectedPacksLearned()" class="text-xs bg-amber-500 hover:bg-amber-600 text-white font-black px-3 py-1.5 rounded-xl shadow transition-all active:scale-95">
-                            🔄 選択中のパックを未習得に戻す
-                        </button>
+                    <div id="q-pack-checkboxes" class="space-y-1 max-h-40 overflow-y-auto pr-1">
                     </div>
                 </div>
 
@@ -149,7 +153,7 @@
 
     <script>
         let db = JSON.parse(localStorage.getItem('my_cn_db')) || [];
-        let lastPage = localStorage.getItem('my_last_page') || ""; 
+        let lastPage = localStorage.getItem('my_last_page') || "";
         const toneMap = { 
             a:['ā','á','ǎ','à'], e:['ē','é','ě','è'], i:['ī','í','ǐ','ì'], o:['ō','ó','ǒ','ò'], u:['ū','ú','ǔ','ù'], v:['ǖ','ǘ','ǚ','ǜ'], ü:['ǖ','ǘ','ǚ','ǜ'],
             A:['Ā','Á','Ǎ','À'], E:['Ē','É','Ě','È'], I:['Ī','Í','Ǐ','Ì'], O:['Ō','Ó','Ǒ','Ò'], U:['Ū','Ú','Ǔ','Ù'], V:['Ǖ','Ǘ','Ǚ','Ǜ'], Ü:['Ǖ','Ǘ','Ǚ','Ǜ']
@@ -232,7 +236,7 @@
             const pinyin = document.getElementById('pIn').value.trim();
             const mean = document.getElementById('mIn').value.trim();
             const detail = document.getElementById('dIn').value.trim();
-            const page = document.getElementById('pgIn').value.trim(); 
+            const page = document.getElementById('pgIn').value.trim();
             if (!word || !pinyin) return alert('入力不足です');
             if (editIdx > -1) { db[editIdx] = { ...db[editIdx], word, pinyin, mean, detail, page }; }
             else { db.push({ word, pinyin, mean, detail, page, learned: false }); }
@@ -266,11 +270,13 @@
 
         function renderList() {
             updateCountBadge();
+            renderDeletePackSelect();
             const container = document.getElementById('word-list-container');
             if (!db.length) {
                 container.innerHTML = '<div class="text-center py-20 text-slate-400 font-black italic">データがありません</div>';
                 return;
             }
+            
             container.innerHTML = db.map((item, i) => {
                 return `
                 <div class="bg-white p-6 rounded-[2rem] shadow-md border border-slate-200 flex justify-between items-start ${item.learned ? 'opacity-60 bg-slate-50' : ''}">
@@ -291,6 +297,49 @@
                     </div>
                 </div>`;
             }).reverse().join('');
+        }
+
+        function renderDeletePackSelect() {
+            const select = document.getElementById('delete-pack-select');
+            const packs = [...new Set(db.map(item => item.page || "未分類"))].sort();
+            if (packs.length === 0) {
+                select.innerHTML = '<option value="">パックがありません</option>';
+                return;
+            }
+            select.innerHTML = packs.map(pack => `<option value="${pack}">${pack}</option>`).join('');
+        }
+
+        // 🌟 追加：パック内の全単語を一括で未修得に戻す（learned = false にする）
+        function resetPackLearned() {
+            const select = document.getElementById('delete-pack-select');
+            const targetPack = select.value;
+            if (!targetPack) return;
+            if (confirm(`パック「${targetPack}」のすべての単語を未修得に戻しますか？`)) {
+                db.forEach(item => {
+                    const itemPack = item.page || "未分類";
+                    if (itemPack === targetPack) {
+                        item.learned = false;
+                    }
+                });
+                save();
+                renderList();
+                alert(`パック「${targetPack}」の単語をすべて未修得に戻しました`);
+            }
+        }
+
+        function deletePackWords() {
+            const select = document.getElementById('delete-pack-select');
+            const targetPack = select.value;
+            if (!targetPack) return;
+            if (confirm(`パック「${targetPack}」のすべての単語を削除しますか？`)) {
+                db = db.filter(item => {
+                    const itemPack = item.page || "未分類";
+                    return itemPack !== targetPack;
+                });
+                save();
+                renderList();
+                alert(`パック「${targetPack}」の単語を削除しました`);
+            }
         }
 
         function toggleLearned(i) { db[i].learned = !db[i].learned; save(); renderList(); }
@@ -347,6 +396,9 @@
         }
 
         function setupQuizConfig() {
+            const previouslyChecked = Array.from(document.querySelectorAll('input[name="quiz-packs"]:checked')).map(cb => cb.value);
+            const hasExistingCheckboxes = document.querySelectorAll('input[name="quiz-packs"]').length > 0;
+
             const packs = [...new Set(db.map(item => item.page || "未分類"))].sort();
             const checkboxContainer = document.getElementById('q-pack-checkboxes');
             
@@ -358,14 +410,14 @@
 
             checkboxContainer.innerHTML = packs.map((pack, idx) => {
                 const packCount = db.filter(item => !item.learned && (item.page || "未分類") === pack).length;
-                const totalCount = db.filter(item => (item.page || "未分類") === pack).length;
+                const isChecked = !hasExistingCheckboxes || previouslyChecked.includes(pack);
                 return `
                 <label class="flex items-center justify-between p-2 hover:bg-slate-100 rounded-xl cursor-pointer text-sm font-bold text-slate-700">
                     <div class="flex items-center gap-2">
-                        <input type="checkbox" name="quiz-packs" value="${pack}" checked onchange="calculateQuizPoolCount()" class="w-4 h-4 accent-red-500 rounded">
+                        <input type="checkbox" name="quiz-packs" value="${pack}" ${isChecked ? 'checked' : ''} onchange="calculateQuizPoolCount()" class="w-4 h-4 accent-red-500 rounded">
                         <span>${pack}</span>
                     </div>
-                    <span class="text-xs bg-slate-200 text-slate-500 px-2 py-0.5 rounded-full font-mono">${packCount} / ${totalCount} 語</span>
+                    <span class="text-xs bg-slate-200 text-slate-500 px-2 py-0.5 rounded-full font-mono">${packCount}語</span>
                 </label>`;
             }).join('');
 
@@ -382,26 +434,6 @@
             document.getElementById('unlearned-count').innerText = `選択中パックの未修得: ${targetWords.length} 語`;
         }
 
-        // 🌟 新機能：選択されているパックの単語をすべて未習得に戻す
-        function resetSelectedPacksLearned() {
-            const checkedPacks = Array.from(document.querySelectorAll('input[name="quiz-packs"]:checked')).map(cb => cb.value);
-            if (checkedPacks.length === 0) return alert('リセットしたいパックにチェックを入れてください。');
-
-            if (confirm(`選択中のパック（${checkedPacks.join(', ')}）に登録されているすべての単語を「未習得」に戻しますか？`)) {
-                let resetCount = 0;
-                db.forEach(item => {
-                    const itemPack = item.page || "未分類";
-                    if (checkedPacks.includes(itemPack) && item.learned) {
-                        item.learned = false;
-                        resetCount++;
-                    }
-                });
-                save();
-                setupQuizConfig(); // クイズ画面のカウント数字を更新
-                alert(`リセット完了：${resetCount} 件の単語を未習得に戻しました！`);
-            }
-        }
-
         function startQuiz(count) {
             const checkedPacks = Array.from(document.querySelectorAll('input[name="quiz-packs"]:checked')).map(cb => cb.value);
             if (checkedPacks.length === 0) return alert('パックを1つ以上選択してください');
@@ -412,7 +444,7 @@
                 return checkedPacks.includes(itemPack);
             });
             
-            if (unlearned.length === 0) return alert('選択されたパックに対象の未習得単語がありません。すべて解き終わっている場合は、リセットボタンを押して戻してください。');
+            if (unlearned.length === 0) return alert('選択されたパックに対象の未習得単語がありません');
             
             currentQuizType = document.querySelector('input[name="quiz-type"]:checked').value;
             quizPool = unlearned.sort(() => 0.5 - Math.random()).slice(0, count);
